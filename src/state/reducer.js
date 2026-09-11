@@ -1,5 +1,10 @@
-import { uid } from "../utils/format.js";
+import { uid, toBase } from "../utils/format.js";
 import { buildDemoData } from "../data/demoData.js";
+
+function txnEffect(txn) {
+  const sign = txn.type === "depense" ? -1 : 1;
+  return sign * toBase(txn.amount, txn.currency);
+}
 
 export const emptyState = {
   theme: "light",
@@ -35,12 +40,38 @@ export function reducer(state, action) {
     case "DELETE_HOLDING":
       return { ...state, holdings: state.holdings.filter((h) => h.id !== action.id) };
 
-    case "ADD_TXN":
-      return { ...state, transactions: [{ ...action.data, id: uid("txn") }, ...state.transactions] };
-    case "UPDATE_TXN":
-      return { ...state, transactions: state.transactions.map((t) => (t.id === action.id ? { ...t, ...action.data } : t)) };
-    case "DELETE_TXN":
-      return { ...state, transactions: state.transactions.filter((t) => t.id !== action.id) };
+    case "ADD_TXN": {
+      const txn = { ...action.data, id: uid("txn") };
+      let accounts = state.accounts;
+      if (txn.accountId) {
+        accounts = accounts.map((a) => (a.id === txn.accountId ? { ...a, balance: a.balance + txnEffect(txn) } : a));
+      }
+      return { ...state, transactions: [txn, ...state.transactions], accounts };
+    }
+    case "UPDATE_TXN": {
+      const oldTxn = state.transactions.find((t) => t.id === action.id);
+      const newTxn = { ...oldTxn, ...action.data };
+      let accounts = state.accounts;
+      if (oldTxn) {
+        const oldAccount = oldTxn.accountId;
+        const newAccount = newTxn.accountId;
+        accounts = accounts.map((a) => {
+          let delta = 0;
+          if (a.id === oldAccount) delta -= txnEffect(oldTxn);
+          if (a.id === newAccount) delta += txnEffect(newTxn);
+          return delta !== 0 ? { ...a, balance: a.balance + delta } : a;
+        });
+      }
+      return { ...state, transactions: state.transactions.map((t) => (t.id === action.id ? newTxn : t)), accounts };
+    }
+    case "DELETE_TXN": {
+      const txn = state.transactions.find((t) => t.id === action.id);
+      let accounts = state.accounts;
+      if (txn && txn.accountId) {
+        accounts = accounts.map((a) => (a.id === txn.accountId ? { ...a, balance: a.balance - txnEffect(txn) } : a));
+      }
+      return { ...state, transactions: state.transactions.filter((t) => t.id !== action.id), accounts };
+    }
 
     case "SET_BUDGET":
       return { ...state, budgets: { ...state.budgets, [action.category]: action.amount } };
