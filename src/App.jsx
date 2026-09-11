@@ -64,7 +64,7 @@ export default function App() {
         {state.view === "depenses" && <Transactions state={state} kind="depense" openQuick={openQuick} openEdit={openEdit} />}
         {state.view === "budget" && <Budget state={state} computed={computed} dispatch={dispatch} />}
         {state.view === "objectifs" && <Objectifs state={state} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "comptes" && <Comptes state={state} openQuick={openQuick} openEdit={openEdit} />}
+        {state.view === "comptes" && <Comptes state={state} dispatch={dispatch} openQuick={openQuick} openEdit={openEdit} />}
         {state.view === "parametres" && <Parametres state={state} dispatch={dispatch} />}
       </main>
 

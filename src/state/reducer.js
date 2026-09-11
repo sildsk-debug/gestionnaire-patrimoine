@@ -32,6 +32,8 @@ export function reducer(state, action) {
       return { ...state, accounts: state.accounts.map((a) => (a.id === action.id ? { ...a, ...action.data } : a)) };
     case "DELETE_ACCOUNT":
       return { ...state, accounts: state.accounts.filter((a) => a.id !== action.id) };
+    case "REORDER_ACCOUNTS":
+      return { ...state, accounts: action.accounts };
 
     case "ADD_HOLDING":
       return { ...state, holdings: [...state.holdings, { ...action.data, id: uid("hld") }] };

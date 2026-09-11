@@ -142,6 +142,11 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 
 .account-name { font-size: 13.5px; font-weight: 600; }
 
+.drag-handle { flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-secondary); background: transparent; border: none; border-radius: 8px; cursor: grab; touch-action: none; padding: 0; }
+.drag-handle:active { cursor: grabbing; }
+.account-row.dragging { opacity: 0.45; }
+.account-row.dragging .drag-handle { cursor: grabbing; }
+
 .budget-row { display: flex; flex-direction: column; gap: 8px; }
 .budget-top { display: flex; align-items: center; justify-content: space-between; }
 .budget-cat { font-size: 13.5px; font-weight: 600; }
