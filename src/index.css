@@ -142,6 +142,12 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
 
 .account-name { font-size: 13.5px; font-weight: 600; }
 
+.swipe-wrap { position: relative; width: 100%; border-radius: 14px; overflow: hidden; }
+.swipe-content { position: relative; width: 100%; transition: transform .18s ease; touch-action: pan-y; }
+.swipe-content.open { transform: translateX(-92px); }
+.swipe-content.dragging { transition: none; }
+.swipe-delete { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 38px; border: none; background: var(--neg); color: #fff; cursor: pointer; }
+
 .drag-handle { flex: none; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; color: var(--text-secondary); background: transparent; border: none; border-radius: 8px; cursor: grab; touch-action: none; padding: 0; }
 .drag-handle:active { cursor: grabbing; }
 .account-row.dragging { opacity: 0.45; }

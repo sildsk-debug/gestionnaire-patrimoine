@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { Wallet, TrendingUp, TrendingDown, Plus } from "lucide-react";
 import { Card, KpiCard, EmptyState } from "../components/ui.jsx";
+import SwipeableRow from "../components/SwipeableRow.jsx";
 import { fmtMoney, fmtPct } from "../utils/format.js";
 
-export default function Investissements({ computed, openQuick, openEdit }) {
+export default function Investissements({ dispatch, computed, openQuick, openEdit }) {
   const [filterType, setFilterType] = useState("all");
   const [sortBy, setSortBy] = useState("value");
 
@@ -43,19 +44,21 @@ export default function Investissements({ computed, openQuick, openEdit }) {
       ) : (
         <div className="holdings-list">
           {rows.map((h) => (
-            <button key={h.id} className="holding-row" onClick={() => openEdit("holding", h)}>
-              <div className="holding-main">
-                <span className={"badge-type " + h.type}>{h.type === "stock" ? "Action" : "ETF"}</span>
-                <div>
-                  <div className="holding-name">{h.name}</div>
-                  <div className="holding-sub">{h.ticker} · {h.quantity} × {fmtMoney(h.currentPrice, h.currency, 2)}</div>
+            <SwipeableRow key={h.id} id={h.id} onDelete={() => dispatch({ type: "DELETE_HOLDING", id: h.id })}>
+              <button className="holding-row" onClick={() => openEdit("holding", h)}>
+                <div className="holding-main">
+                  <span className={"badge-type " + h.type}>{h.type === "stock" ? "Action" : "ETF"}</span>
+                  <div>
+                    <div className="holding-name">{h.name}</div>
+                    <div className="holding-sub">{h.ticker} · {h.quantity} × {fmtMoney(h.currentPrice, h.currency, 2)}</div>
+                  </div>
                 </div>
-              </div>
-              <div className="holding-values">
-                <div className="holding-value">{fmtMoney(h.valueBase)}</div>
-                <div className={"holding-perf " + (h.perfPct >= 0 ? "pos" : "neg")}>{fmtPct(h.perfPct)}</div>
-              </div>
-            </button>
+                <div className="holding-values">
+                  <div className="holding-value">{fmtMoney(h.valueBase)}</div>
+                  <div className={"holding-perf " + (h.perfPct >= 0 ? "pos" : "neg")}>{fmtPct(h.perfPct)}</div>
+                </div>
+              </button>
+            </SwipeableRow>
           ))}
         </div>
       )}

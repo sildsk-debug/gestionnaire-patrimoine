@@ -4,6 +4,7 @@ import { DndContext, PointerSensor, TouchSensor, KeyboardSensor, closestCenter, 
 import { SortableContext, useSortable, verticalListSortingStrategy, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { EmptyState } from "../components/ui.jsx";
+import SwipeableRow from "../components/SwipeableRow.jsx";
 import { ASSET_TYPES, LIABILITY_TYPES } from "../data/constants.js";
 import { fmtMoney, catInfo } from "../utils/format.js";
 
@@ -64,7 +65,9 @@ export default function Comptes({ state, dispatch, openQuick, openEdit }) {
           <SortableContext items={state.accounts.map((a) => a.id)} strategy={verticalListSortingStrategy}>
             <div className="accounts-list">
               {state.accounts.map((a) => (
-                <SortableAccountRow key={a.id} account={a} onEdit={() => openEdit("account", a)} />
+                <SwipeableRow key={a.id} id={a.id} onDelete={() => dispatch({ type: "DELETE_ACCOUNT", id: a.id })}>
+                  <SortableAccountRow account={a} onEdit={() => openEdit("account", a)} />
+                </SwipeableRow>
               ))}
             </div>
           </SortableContext>

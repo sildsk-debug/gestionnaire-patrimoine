@@ -6,6 +6,7 @@ import { buildDemoData } from "./data/demoData.js";
 import { loadState, saveState } from "./utils/storage.js";
 import { NAV } from "./data/constants.js";
 import { Sheet } from "./components/ui.jsx";
+import { SwipeProvider } from "./components/SwipeableRow.jsx";
 import { AccountForm, HoldingForm, TransactionForm, GoalForm } from "./components/forms.jsx";
 
 import Dashboard from "./pages/Dashboard.jsx";
@@ -56,16 +57,18 @@ export default function App() {
       </header>
 
       <main className="app-main">
+        <SwipeProvider>
         {state.view === "dashboard" && <Dashboard state={state} computed={computed} openQuick={openQuick} />}
         {state.view === "patrimoine" && <Patrimoine state={state} computed={computed} openEdit={openEdit} dispatch={dispatch} />}
-        {state.view === "investissements" && <Investissements computed={computed} openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "transactions" && <Transactions state={state} kind="all" openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "revenus" && <Transactions state={state} kind="revenu" openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "depenses" && <Transactions state={state} kind="depense" openQuick={openQuick} openEdit={openEdit} />}
+        {state.view === "investissements" && <Investissements state={state} dispatch={dispatch} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
+        {state.view === "transactions" && <Transactions state={state} dispatch={dispatch} kind="all" openQuick={openQuick} openEdit={openEdit} />}
+        {state.view === "revenus" && <Transactions state={state} dispatch={dispatch} kind="revenu" openQuick={openQuick} openEdit={openEdit} />}
+        {state.view === "depenses" && <Transactions state={state} dispatch={dispatch} kind="depense" openQuick={openQuick} openEdit={openEdit} />}
         {state.view === "budget" && <Budget state={state} computed={computed} dispatch={dispatch} />}
         {state.view === "objectifs" && <Objectifs state={state} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
         {state.view === "comptes" && <Comptes state={state} dispatch={dispatch} openQuick={openQuick} openEdit={openEdit} />}
         {state.view === "parametres" && <Parametres state={state} dispatch={dispatch} />}
+        </SwipeProvider>
       </main>
 
       {navOpen && (

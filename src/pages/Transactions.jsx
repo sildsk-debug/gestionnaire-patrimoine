@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { Search, ArrowUpDown, Plus } from "lucide-react";
 import { Card, EmptyState } from "../components/ui.jsx";
+import SwipeableRow from "../components/SwipeableRow.jsx";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from "../data/constants.js";
 import { fmtMoney, fmtDate, toBase, sumBy, catInfo } from "../utils/format.js";
 
 // Page réutilisée pour les 3 vues : Transactions (kind="all"), Revenus ("revenu"), Dépenses ("depense").
-export default function Transactions({ state, kind, openQuick, openEdit }) {
+export default function Transactions({ state, dispatch, kind, openQuick, openEdit }) {
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("all");
   const [sortDesc, setSortDesc] = useState(true);
@@ -46,14 +47,16 @@ export default function Transactions({ state, kind, openQuick, openEdit }) {
           {rows.map((t) => {
             const info = catInfo(t.type === "revenu" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES, t.category);
             return (
-              <button key={t.id} className="txn-row" onClick={() => openEdit("transaction", t)}>
-                <span className="txn-icon">{info.icon}</span>
-                <div className="txn-mid">
-                  <div className="txn-desc">{t.description || info.label}</div>
-                  <div className="txn-sub">{info.label} · {fmtDate(t.date)}</div>
-                </div>
-                <span className={"txn-amount " + (t.type === "revenu" ? "pos" : "neg")}>{t.type === "revenu" ? "+" : "−"}{fmtMoney(t.amount, t.currency)}</span>
-              </button>
+              <SwipeableRow key={t.id} id={t.id} onDelete={() => dispatch({ type: "DELETE_TXN", id: t.id })}>
+                <button className="txn-row" onClick={() => openEdit("transaction", t)}>
+                  <span className="txn-icon">{info.icon}</span>
+                  <div className="txn-mid">
+                    <div className="txn-desc">{t.description || info.label}</div>
+                    <div className="txn-sub">{info.label} · {fmtDate(t.date)}</div>
+                  </div>
+                  <span className={"txn-amount " + (t.type === "revenu" ? "pos" : "neg")}>{t.type === "revenu" ? "+" : "−"}{fmtMoney(t.amount, t.currency)}</span>
+                </button>
+              </SwipeableRow>
             );
           })}
         </div>
