@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Trash2 } from "lucide-react";
 
 const DELETE_WIDTH = 92;
@@ -12,6 +12,24 @@ const SwipeContext = createContext({ openId: null, setOpenId: () => {} });
 
 export function SwipeProvider({ children }) {
   const [openId, setOpenId] = useState(null);
+
+  // Referme la ligne ouverte dès qu'on interagit avec l'écran (tap ailleurs,
+  // scroll), sauf si le tap vise le bouton corbeille de la ligne ouverte.
+  useEffect(() => {
+    if (openId === null) return;
+    const onPointerDown = (e) => {
+      if (e.target && e.target.closest && e.target.closest(".swipe-delete")) return;
+      setOpenId(null);
+    };
+    const onScroll = () => setOpenId(null);
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [openId, setOpenId]);
+
   return <SwipeContext.Provider value={{ openId, setOpenId }}>{children}</SwipeContext.Provider>;
 }
 
