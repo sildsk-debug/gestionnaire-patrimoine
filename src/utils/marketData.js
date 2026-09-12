@@ -188,11 +188,9 @@ export async function validateMarketApiKey(apiKey, provider = "alphavantage") {
 async function refreshAlphaVantage(holdings, apiKey, force = false) {
   const errors = [];
   let updated = 0;
-  let skipped = 0;
   let stoppedForBudget = 0;
   const prices = {};
   const pending = [...holdings].filter((h) => force || getCachedQuote(h.ticker) == null);
-  if (!force) skipped = holdings.length - pending.length;
 
   for (let i = 0; i < pending.length; i++) {
     const h = pending[i];
@@ -211,17 +209,15 @@ async function refreshAlphaVantage(holdings, apiKey, force = false) {
     if (i < pending.length - 1) await sleep(holdings.length > 5 ? 12000 : 1500);
   }
 
-  return { total: holdings.length, updated, skipped, errors, stoppedForBudget, prices };
+  return { total: holdings.length, updated, errors, stoppedForBudget, prices };
 }
 
 async function refreshTwelveData(holdings, apiKey, force = false) {
   const errors = [];
   let updated = 0;
-  let skipped = 0;
   let stoppedForBudget = 0;
   const prices = {};
   const pending = holdings.filter((h) => force || getCachedQuote(h.ticker) == null);
-  if (!force) skipped = holdings.length - pending.length;
 
   for (let start = 0; start < pending.length; start += TD_BATCH_SIZE) {
     if (getQuoteBudget().used >= TD_DAILY_LIMIT) {
@@ -248,7 +244,7 @@ async function refreshTwelveData(holdings, apiKey, force = false) {
     }
   }
 
-  return { total: holdings.length, updated, skipped, errors, stoppedForBudget, prices };
+  return { total: holdings.length, updated, errors, stoppedForBudget, prices };
 }
 
 export async function refreshAllQuotes(holdings, provider = "alphavantage", apiKey, options = {}) {

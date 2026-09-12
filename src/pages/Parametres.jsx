@@ -16,7 +16,7 @@ export default function Parametres({ state, dispatch }) {
   const [keyBusy, setKeyBusy] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(loadSettings().autoRefresh ?? false);
   const [autoRefreshHours, setAutoRefreshHours] = useState(loadSettings().autoRefreshHours ?? 6);
-  const [fxDate, setFxDate] = useState(getCachedFxDate());
+  const fxDate = getCachedFxDate();
 
   const providerInfo = MARKET_PROVIDERS.find((p) => p.id === provider) || MARKET_PROVIDERS[0];
   const dailyLimit = getProviderDailyLimit(provider);
