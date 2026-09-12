@@ -15,6 +15,7 @@ export default function Parametres({ state, dispatch }) {
   const [keyInput, setKeyInput] = useState(getMarketKey(loadSettings(), loadSettings().marketProvider || "alphavantage") || "");
   const [keyBusy, setKeyBusy] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(loadSettings().autoRefresh ?? false);
+  const [autoRefreshHours, setAutoRefreshHours] = useState(loadSettings().autoRefreshHours ?? 6);
   const [fxDate, setFxDate] = useState(getCachedFxDate());
   const [fxBusy, setFxBusy] = useState(false);
 
@@ -64,15 +65,28 @@ export default function Parametres({ state, dispatch }) {
   const handleChangeProvider = (e) => {
     const nextId = e.target.value;
     const current = loadSettings();
+    const prevHours = current.autoRefreshHours ?? 6;
+    const forceSix = nextId === "alphavantage" && prevHours === 1;
     setProvider(nextId);
-    setSettings(saveSettings({ marketProvider: nextId }));
+    setAutoRefreshHours(forceSix ? 6 : prevHours);
+    setSettings(saveSettings({ marketProvider: nextId, ...(forceSix ? { autoRefreshHours: 6 } : {}) }));
     setKeyInput(getMarketKey(current, nextId) || "");
     setStatus({
       type: "success",
-      message: nextId === "twelvedata"
-        ? "Fournisseur sélectionné : Twelve Data (cours temps réel US, 800 crédits/jour)."
-        : "Fournisseur sélectionné : Alpha Vantage (25 requêtes/jour).",
+      message: forceSix
+        ? "Fournisseur sélectionné : Alpha Vantage. L'horaire n'est pas possible avec 25 req/jour, fréquence repassée à toutes les 6 h."
+        : nextId === "twelvedata"
+          ? "Fournisseur sélectionné : Twelve Data (cours temps réel US, 800 crédits/jour)."
+          : "Fournisseur sélectionné : Alpha Vantage (25 requêtes/jour).",
     });
+  };
+
+  const handleChangeCadence = (e) => {
+    const val = Number(e.target.value);
+    setAutoRefreshHours(val);
+    setSettings(saveSettings({ autoRefreshHours: val }));
+    const label = val === 0 ? "à l'ouverture de l'app uniquement" : val === 1 ? "toutes les heures (Twelve Data)" : "toutes les 6 heures";
+    setStatus({ type: "success", message: `Fréquence d'actualisation automatique : ${label}.` });
   };
 
   const handleSaveKey = async (e) => {
@@ -116,7 +130,7 @@ export default function Parametres({ state, dispatch }) {
     setSettings(saveSettings({ autoRefresh: next }));
     setStatus({
       type: "success",
-      message: next ? "Actualisation automatique activée : à chaque ouverture de l'app, puis toutes les 6 heures." : "Actualisation automatique désactivée.",
+      message: next ? "Actualisation automatique activée. Choisissez la fréquence ci-dessous." : "Actualisation automatique désactivée.",
     });
   };
 
@@ -221,8 +235,18 @@ export default function Parametres({ state, dispatch }) {
         </p>
         <label className="checkbox-row">
           <input type="checkbox" checked={autoRefresh} onChange={handleToggleAutoRefresh} />
-          Actualisation automatique des cours (à l'ouverture de l'app, puis toutes les 6 h)
+          Actualisation automatique des cours
         </label>
+        {autoRefresh && (
+          <>
+            <label className="field-label" htmlFor="auto-cadence">Fréquence</label>
+            <select id="auto-cadence" className="sort-select full" value={`${autoRefreshHours}`} onChange={handleChangeCadence}>
+              <option value="0">À l'ouverture de l'app uniquement</option>
+              <option value="6">Toutes les 6 heures</option>
+              {provider === "twelvedata" && <option value="1">Toutes les heures</option>}
+            </select>
+          </>
+        )}
       </Card>
 
       <Card>

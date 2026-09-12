@@ -6,6 +6,14 @@ const TD_DAILY_LIMIT = 780;
 const TD_BATCH_SIZE = 8;
 const TD_MINUTE_DELAY = 61000;
 
+let lastTwelveDataCallAt = 0;
+
+async function paceTwelveData() {
+  const wait = TD_MINUTE_DELAY - (Date.now() - lastTwelveDataCallAt);
+  if (wait > 0) await sleep(wait);
+  lastTwelveDataCallAt = Date.now();
+}
+
 export const MARKET_PROVIDERS = [
   {
     id: "alphavantage",
@@ -220,6 +228,7 @@ async function refreshTwelveData(holdings, apiKey) {
       stoppedForBudget = pending.length - start;
       break;
     }
+    await paceTwelveData();
     const chunk = pending.slice(start, start + TD_BATCH_SIZE);
     try {
       const prices = await fetchPricesTwelveData(chunk.map((h) => h.ticker), apiKey);
@@ -237,7 +246,6 @@ async function refreshTwelveData(holdings, apiKey) {
       errors.push({ ticker: chunk.map((c) => c.ticker).join(","), message: err.message });
       break;
     }
-    if (start + TD_BATCH_SIZE < pending.length) await sleep(TD_MINUTE_DELAY);
   }
 
   return { total: holdings.length, updated, skipped, errors, stoppedForBudget };

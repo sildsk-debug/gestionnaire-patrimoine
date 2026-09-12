@@ -69,16 +69,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    let lastAutoAt = 0;
     const runAutoRefresh = async () => {
       const settings = loadSettings();
       if (!settings.autoRefresh) return;
       const provider = settings.marketProvider || "alphavantage";
+      const hours = settings.autoRefreshHours ?? 6;
+      if (provider === "alphavantage" && hours < 6) return;
       const apiKey = getMarketKey(settings, provider);
       if (!apiKey) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const holdings = stateRef.current.holdings || [];
       if (!holdings.length) return;
-      const maxAge = Math.max(1, settings.autoRefreshHours || 6) * 3600 * 1000;
+      const maxAge = (hours > 0 ? hours : 6) * 3600 * 1000;
       const stale = holdings.filter((h) => getCachedQuote(h.ticker, maxAge) == null);
       if (!stale.length) return;
       let res;
@@ -93,8 +96,19 @@ export default function App() {
       if (res.updated) showToast(`${res.updated} cours actualisés automatiquement.`, false);
       else if (res.stoppedForBudget > 0) showToast(`Budget de cours du jour atteint (${getProviderDailyLimit(provider)} requêtes). Actualisation repoussée.`, false);
     };
-    const first = setTimeout(runAutoRefresh, 2000);
-    const tick = setInterval(runAutoRefresh, 6 * 3600 * 1000);
+    const first = setTimeout(() => {
+      lastAutoAt = Date.now();
+      runAutoRefresh();
+    }, 2000);
+    const tick = setInterval(() => {
+      const settings = loadSettings();
+      if (!settings.autoRefresh) return;
+      const hours = settings.autoRefreshHours ?? 6;
+      if (hours <= 0) return;
+      if (Date.now() - lastAutoAt < hours * 3600 * 1000) return;
+      lastAutoAt = Date.now();
+      runAutoRefresh();
+    }, 60000);
     return () => {
       clearTimeout(first);
       clearInterval(tick);

@@ -9,6 +9,13 @@ import { loadSettings, getMarketKey } from "../utils/settings.js";
 
 const tooltipStyle = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12 };
 
+function cadenceLabel(settings) {
+  const hours = settings.autoRefreshHours ?? 6;
+  if (hours <= 0) return "à l'ouverture uniquement";
+  if (hours === 1) return "toutes les heures";
+  return `toutes les ${hours} heures`;
+}
+
 export default function Investissements({ state, dispatch, computed, openQuick, openEdit }) {
   const [filterType, setFilterType] = useState("all");
   const [sortBy, setSortBy] = useState("value");
@@ -100,7 +107,7 @@ export default function Investissements({ state, dispatch, computed, openQuick, 
       {refreshMsg && <p className={"muted-line status-" + refreshMsg.type}>{refreshMsg.text}</p>}
       {loadSettings().autoRefresh && (
         <p className="muted-line" style={{ padding: 0 }}>
-          Auto : à l'ouverture de l'app puis toutes les 6 h · Requêtes utilisées aujourd'hui : {getQuoteBudget().used} / {getProviderDailyLimit(loadSettings().marketProvider || "alphavantage")}
+          Auto {cadenceLabel(loadSettings())} · Requêtes utilisées aujourd'hui : {getQuoteBudget().used} / {getProviderDailyLimit(loadSettings().marketProvider || "alphavantage")}
         </p>
       )}
 

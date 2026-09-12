@@ -150,9 +150,10 @@ possible de les **actualiser automatiquement** via deux fournisseurs au choix :
    sont mis en cache 24 h pour ne pas dépasser le quota.
 
 Une **actualisation automatique** optionnelle (page Paramètres) rafraîchit les
-cours à l'ouverture de l'app puis toutes les 6 h, dans la limite du quota du
-fournisseur sélectionné (compteur affiché). Fonctionne uniquement quand l'app
-est ouverte.
+cours **à l'ouverture de l'app uniquement**, **toutes les 6 heures** ou
+**toutes les heures** (hourly réservé à Twelve Data, inutile avec les 25
+requêtes/jour d'Alpha Vantage), dans la limite du quota du fournisseur
+sélectionné (compteur affiché). Fonctionne uniquement quand l'app est ouverte.
 
 Les courbes d'évolution par position se construisent à partir des
 **instantanés** enregistrés dans la page Patrimoine (fonctionne sans clé API).
