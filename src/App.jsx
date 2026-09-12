@@ -68,6 +68,30 @@ export default function App() {
     refreshFx().then(() => setFxTick((t) => t + 1));
   }, []);
 
+  // Les taux de change sont rafraîchis automatiquement chaque jour (l'ECB ne
+  // publie qu'une fois par jour ouvré) et dès que l'app repasse au premier plan.
+  useEffect(() => {
+    let lastFxAt = 0;
+    const FX_REFRESH_MS = 24 * 3600 * 1000;
+    const bootFx = () => {
+      refreshFx().then(() => setFxTick((t) => t + 1));
+      lastFxAt = Date.now();
+    };
+    bootFx();
+    const fxTick = setInterval(() => {
+      if (Date.now() - lastFxAt < FX_REFRESH_MS) return;
+      bootFx();
+    }, 60000);
+    const onFxVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastFxAt >= FX_REFRESH_MS) bootFx();
+    };
+    document.addEventListener("visibilitychange", onFxVisible);
+    return () => {
+      clearInterval(fxTick);
+      document.removeEventListener("visibilitychange", onFxVisible);
+    };
+  }, []);
+
   useEffect(() => {
     let lastAutoAt = 0;
     const runAutoRefresh = async () => {
@@ -90,8 +114,9 @@ export default function App() {
       } catch (err) {
         return;
       }
+      if (res == null) return;
       for (const h of stale) {
-        if (h.appliedPrice != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: h.appliedPrice } });
+        if (res.prices[h.id] != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: res.prices[h.id] } });
       }
       if (res.updated) showToast(`${res.updated} cours actualisés automatiquement.`, false);
       else if (res.stoppedForBudget > 0) showToast(`Budget de cours du jour atteint (${getProviderDailyLimit(provider)} requêtes). Actualisation repoussée.`, false);
@@ -109,9 +134,20 @@ export default function App() {
       lastAutoAt = Date.now();
       runAutoRefresh();
     }, 60000);
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const settings = loadSettings();
+      if (!settings.autoRefresh) return;
+      const hours = settings.autoRefreshHours ?? 6;
+      if (Date.now() - lastAutoAt < hours * 3600 * 1000) return;
+      lastAutoAt = Date.now();
+      runAutoRefresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       clearTimeout(first);
       clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

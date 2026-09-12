@@ -4,7 +4,7 @@ import { Card } from "../components/ui.jsx";
 import { buildExportPayload, downloadJson, parseImportPayload, readFileAsText } from "../utils/backup.js";
 import { MARKET_PROVIDERS, validateMarketApiKey, getQuoteBudget, getProviderDailyLimit } from "../utils/marketData.js";
 import { loadSettings, saveSettings, getMarketKey, setMarketKey } from "../utils/settings.js";
-import { refreshFx, getCachedFxDate } from "../utils/fx.js";
+import { getCachedFxDate } from "../utils/fx.js";
 import { fmtMoney } from "../utils/format.js";
 
 export default function Parametres({ state, dispatch }) {
@@ -17,7 +17,6 @@ export default function Parametres({ state, dispatch }) {
   const [autoRefresh, setAutoRefresh] = useState(loadSettings().autoRefresh ?? false);
   const [autoRefreshHours, setAutoRefreshHours] = useState(loadSettings().autoRefreshHours ?? 6);
   const [fxDate, setFxDate] = useState(getCachedFxDate());
-  const [fxBusy, setFxBusy] = useState(false);
 
   const providerInfo = MARKET_PROVIDERS.find((p) => p.id === provider) || MARKET_PROVIDERS[0];
   const dailyLimit = getProviderDailyLimit(provider);
@@ -134,19 +133,6 @@ export default function Parametres({ state, dispatch }) {
     });
   };
 
-  const handleRefreshFx = async () => {
-    if (fxBusy) return;
-    setFxBusy(true);
-    const res = await refreshFx();
-    if (res) {
-      setFxDate(res.date);
-      setStatus(`Taux de change mis à jour (${res.date}).`);
-    } else {
-      setStatus({ type: "error", message: "Impossible de récupérer les taux. Les taux statiques restent utilisés." });
-    }
-    setFxBusy(false);
-  };
-
   const handleResetDemo = () => {
     if (window.confirm("Remplacer toutes les données actuelles par le jeu de données de démonstration ?")) {
       dispatch({ type: "RESET_DEMO" });
@@ -252,14 +238,12 @@ export default function Parametres({ state, dispatch }) {
       <Card>
         <h3><RefreshCw size={15} /> Taux de change</h3>
         <p className="muted-line">
-          Les taux CHF / EUR / USD / GBP sont récupérés automatiquement à l'ouverture (source : Banque centrale
-          européenne) et mis en cache. Hors-ligne, les taux enregistrés (ou des valeurs statiques) sont utilisés.
+          Les taux CHF / EUR / USD / GBP sont rafraîchis automatiquement chaque jour (source : Banque centrale
+          européenne) et dès que l'application redevient active. Hors-ligne, les taux
+          enregistrés ou des valeurs statiques sont utilisés.
         </p>
         <div className="toolbar">
           <span className="muted-line" style={{ padding: 0 }}>Dernière mise à jour : {fxDate || "aucune"}</span>
-          <button className="btn btn-ghost" onClick={handleRefreshFx} disabled={fxBusy}>
-            <RefreshCw size={15} /> Actualiser maintenant
-          </button>
         </div>
       </Card>
 

@@ -4,7 +4,7 @@ import { Wallet, TrendingUp, TrendingDown, Plus, RefreshCw } from "lucide-react"
 import { Card, KpiCard, EmptyState } from "../components/ui.jsx";
 import SwipeableRow from "../components/SwipeableRow.jsx";
 import { fmtMoney, fmtPct, fmtDate } from "../utils/format.js";
-import { refreshAllQuotes, getCachedQuote, getQuoteBudget, getProviderDailyLimit } from "../utils/marketData.js";
+import { refreshAllQuotes, getQuoteBudget, getProviderDailyLimit } from "../utils/marketData.js";
 import { loadSettings, getMarketKey } from "../utils/settings.js";
 
 const tooltipStyle = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12 };
@@ -60,21 +60,33 @@ export default function Investissements({ state, dispatch, computed, openQuick, 
       setRefreshing(false);
       return;
     }
-    const toRefresh = computed.holdingsCalc.filter((h) => getCachedQuote(h.ticker) == null);
+    const toRefresh = [...computed.holdingsCalc];
     if (toRefresh.length === 0) {
-      setRefreshMsg({ type: "info", text: "Tous les cours sont déjà à jour (cache quotidien)." });
+      setRefreshMsg({ type: "info", text: "Aucune position à actualiser." });
       setRefreshing(false);
       return;
     }
-    const res = await refreshAllQuotes(toRefresh, provider, apiKey);
+    let res;
+    try {
+      res = await refreshAllQuotes(toRefresh, provider, apiKey, { force: true });
+    } catch (err) {
+      setRefreshMsg({ type: "error", text: "Échec de l'actualisation des cours : " + (err.message || "erreur inconnue") });
+      setRefreshing(false);
+      return;
+    }
+    if (!res) {
+      setRefreshMsg({ type: "info", text: "Une actualisation est déjà en cours. Réessayez dans un instant." });
+      setRefreshing(false);
+      return;
+    }
     for (const h of toRefresh) {
-      if (h.appliedPrice != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: h.appliedPrice } });
+      if (res.prices[h.id] != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: res.prices[h.id] } });
     }
     const parts = [];
     if (res.updated) parts.push(`${res.updated} cours mis à jour`);
-    if (res.skipped) parts.push(`${res.skipped} déjà à jour`);
+    if (res.stoppedForBudget) parts.push(`${res.stoppedForBudget} ignorés (budget quotidien atteint)`);
     const text = parts.join(", ") + (res.errors.length ? `. Erreurs : ${res.errors.map((e) => e.ticker + " (" + e.message + ")").join(", ")}` : ".");
-    setRefreshMsg({ type: res.errors.length ? "warn" : "success", text });
+    setRefreshMsg({ type: res.errors.length && !res.updated ? "warn" : "success", text });
     setRefreshing(false);
   };
 
@@ -106,10 +118,11 @@ export default function Investissements({ state, dispatch, computed, openQuick, 
       </button>
       {refreshMsg && <p className={"muted-line status-" + refreshMsg.type}>{refreshMsg.text}</p>}
       {loadSettings().autoRefresh && (
-        <p className="muted-line" style={{ padding: 0 }}>
-          Auto {cadenceLabel(loadSettings())} · Requêtes utilisées aujourd'hui : {getQuoteBudget().used} / {getProviderDailyLimit(loadSettings().marketProvider || "alphavantage")}
-        </p>
+        <p className="muted-line" style={{ padding: 0 }}>Auto {cadenceLabel(loadSettings())}</p>
       )}
+      <p className="muted-line" style={{ padding: 0 }}>
+        Requêtes utilisées aujourd'hui : {getQuoteBudget().used} / {getProviderDailyLimit(loadSettings().marketProvider || "alphavantage")}
+      </p>
 
       {rows.length === 0 ? (
         <EmptyState title="Aucune position" sub="Ajoutez votre première action ou ETF pour suivre votre portefeuille." actionLabel="Ajouter un investissement" onAction={() => openQuick("holding")} />

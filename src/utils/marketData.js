@@ -7,6 +7,7 @@ const TD_BATCH_SIZE = 8;
 const TD_MINUTE_DELAY = 61000;
 
 let lastTwelveDataCallAt = 0;
+let refreshInFlight = false;
 
 async function paceTwelveData() {
   const wait = TD_MINUTE_DELAY - (Date.now() - lastTwelveDataCallAt);
@@ -184,20 +185,17 @@ export async function validateMarketApiKey(apiKey, provider = "alphavantage") {
   return { ok: false, message: "Réponse inattendue du fournisseur." };
 }
 
-async function refreshAlphaVantage(holdings, apiKey) {
+async function refreshAlphaVantage(holdings, apiKey, force = false) {
   const errors = [];
   let updated = 0;
   let skipped = 0;
   let stoppedForBudget = 0;
-  const pending = [...holdings];
+  const prices = {};
+  const pending = [...holdings].filter((h) => force || getCachedQuote(h.ticker) == null);
+  if (!force) skipped = holdings.length - pending.length;
 
   for (let i = 0; i < pending.length; i++) {
     const h = pending[i];
-    const cached = getCachedQuote(h.ticker);
-    if (cached != null) {
-      skipped += 1;
-      continue;
-    }
     if (getQuoteBudget().used >= AV_DAILY_LIMIT) {
       stoppedForBudget = pending.length - i;
       break;
@@ -205,7 +203,7 @@ async function refreshAlphaVantage(holdings, apiKey) {
     try {
       const price = await fetchQuoteAlphaVantage(h.ticker, apiKey);
       cacheQuote(h.ticker, price);
-      h.appliedPrice = price;
+      if (h.id != null) prices[h.id] = price;
       updated += 1;
     } catch (err) {
       errors.push({ ticker: h.ticker, message: err.message });
@@ -213,15 +211,17 @@ async function refreshAlphaVantage(holdings, apiKey) {
     if (i < pending.length - 1) await sleep(holdings.length > 5 ? 12000 : 1500);
   }
 
-  return { total: holdings.length, updated, skipped, errors, stoppedForBudget };
+  return { total: holdings.length, updated, skipped, errors, stoppedForBudget, prices };
 }
 
-async function refreshTwelveData(holdings, apiKey) {
+async function refreshTwelveData(holdings, apiKey, force = false) {
   const errors = [];
   let updated = 0;
   let skipped = 0;
   let stoppedForBudget = 0;
-  const pending = holdings.filter((h) => getCachedQuote(h.ticker) == null);
+  const prices = {};
+  const pending = holdings.filter((h) => force || getCachedQuote(h.ticker) == null);
+  if (!force) skipped = holdings.length - pending.length;
 
   for (let start = 0; start < pending.length; start += TD_BATCH_SIZE) {
     if (getQuoteBudget().used >= TD_DAILY_LIMIT) {
@@ -231,12 +231,12 @@ async function refreshTwelveData(holdings, apiKey) {
     await paceTwelveData();
     const chunk = pending.slice(start, start + TD_BATCH_SIZE);
     try {
-      const prices = await fetchPricesTwelveData(chunk.map((h) => h.ticker), apiKey);
+      const ps = await fetchPricesTwelveData(chunk.map((h) => h.ticker), apiKey);
       for (const h of chunk) {
-        const p = prices[h.ticker.toUpperCase()];
+        const p = ps[h.ticker.toUpperCase()];
         if (p != null) {
           cacheQuote(h.ticker, p);
-          h.appliedPrice = p;
+          if (h.id != null) prices[h.id] = p;
           updated += 1;
         } else {
           errors.push({ ticker: h.ticker, message: "Cours introuvable via Twelve Data" });
@@ -244,14 +244,21 @@ async function refreshTwelveData(holdings, apiKey) {
       }
     } catch (err) {
       errors.push({ ticker: chunk.map((c) => c.ticker).join(","), message: err.message });
-      break;
+      continue;
     }
   }
 
-  return { total: holdings.length, updated, skipped, errors, stoppedForBudget };
+  return { total: holdings.length, updated, skipped, errors, stoppedForBudget, prices };
 }
 
-export async function refreshAllQuotes(holdings, provider = "alphavantage", apiKey) {
-  if (provider === "twelvedata") return refreshTwelveData(holdings, apiKey);
-  return refreshAlphaVantage(holdings, apiKey);
+export async function refreshAllQuotes(holdings, provider = "alphavantage", apiKey, options = {}) {
+  const { force = false } = options || {};
+  if (refreshInFlight) return null;
+  refreshInFlight = true;
+  try {
+    if (provider === "twelvedata") return await refreshTwelveData(holdings, apiKey, force);
+    return await refreshAlphaVantage(holdings, apiKey, force);
+  } finally {
+    refreshInFlight = false;
+  }
 }
