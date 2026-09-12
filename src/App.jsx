@@ -62,90 +62,85 @@ export default function App() {
 
   const computed = useComputed(state);
 
+  // Cycle de vie des données de marché. Actualisation UNIQUEMENT quand l'app est
+  // à l'écran (onglet visible) : une passe au lancement, puis un balayage minute
+  // qui applique la cadence configurée tant que l'app reste visible. Dès qu'on
+  // quitte l'app (onglet en arrière-plan), plus aucune requête n'est émise,
+  // ni pour les cours (TD/AV) ni pour les taux de change.
   useEffect(() => {
     loadCachedFx();
-    setFxTick((t) => t + 1);
-    refreshFx().then(() => setFxTick((t) => t + 1));
-  }, []);
-
-  // Les taux de change sont rafraîchis automatiquement chaque jour (l'ECB ne
-  // publie qu'une fois par jour ouvré) et dès que l'app repasse au premier plan.
-  useEffect(() => {
+    let lastQuoteAt = 0;
     let lastFxAt = 0;
+    let quoteBusy = false;
     const FX_REFRESH_MS = 24 * 3600 * 1000;
-    const bootFx = () => {
-      refreshFx().then(() => setFxTick((t) => t + 1));
-      lastFxAt = Date.now();
-    };
-    bootFx();
-    const fxTick = setInterval(() => {
-      if (Date.now() - lastFxAt < FX_REFRESH_MS) return;
-      bootFx();
-    }, 60000);
-    const onFxVisible = () => {
-      if (document.visibilityState === "visible" && Date.now() - lastFxAt >= FX_REFRESH_MS) bootFx();
-    };
-    document.addEventListener("visibilitychange", onFxVisible);
-    return () => {
-      clearInterval(fxTick);
-      document.removeEventListener("visibilitychange", onFxVisible);
-    };
-  }, []);
+    const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
 
-  useEffect(() => {
-    let lastAutoAt = 0;
-    const runAutoRefresh = async () => {
+    const refreshQuotes = async () => {
+      if (!isVisible() || quoteBusy) return;
       const settings = loadSettings();
       if (!settings.autoRefresh) return;
       const provider = settings.marketProvider || "alphavantage";
       const hours = settings.autoRefreshHours ?? 6;
-      if (provider === "alphavantage" && hours < 6) return;
+      if (provider === "alphavantage" && hours > 0 && hours < 6) return;
       const apiKey = getMarketKey(settings, provider);
       if (!apiKey) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const holdings = stateRef.current.holdings || [];
       if (!holdings.length) return;
-      const maxAge = (hours > 0 ? hours : 6) * 3600 * 1000;
+      const maxAge = (hours > 0 ? hours : 24) * 3600 * 1000;
       const stale = holdings.filter((h) => getCachedQuote(h.ticker, maxAge) == null);
       if (!stale.length) return;
-      let res;
+      quoteBusy = true;
       try {
-        res = await refreshAllQuotes(stale, provider, apiKey);
-      } catch (err) {
-        return;
+        const res = await refreshAllQuotes(stale, provider, apiKey);
+        if (res) {
+          for (const h of stale) {
+            if (res.prices[h.id] != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: res.prices[h.id] } });
+          }
+          if (res.updated) showToast(`${res.updated} cours actualisés automatiquement.`, false);
+          else if (res.stoppedForBudget > 0) showToast(`Budget de cours du jour atteint (${getProviderDailyLimit(provider)} requêtes). Réessai à la prochaine ouverture.`, false);
+        }
+      } finally {
+        quoteBusy = false;
       }
-      if (res == null) return;
-      for (const h of stale) {
-        if (res.prices[h.id] != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: res.prices[h.id] } });
-      }
-      if (res.updated) showToast(`${res.updated} cours actualisés automatiquement.`, false);
-      else if (res.stoppedForBudget > 0) showToast(`Budget de cours du jour atteint (${getProviderDailyLimit(provider)} requêtes). Actualisation repoussée.`, false);
     };
-    const first = setTimeout(() => {
-      lastAutoAt = Date.now();
-      runAutoRefresh();
-    }, 2000);
+
+    const refreshFxNow = () => {
+      if (!isVisible()) return;
+      lastFxAt = Date.now();
+      refreshFx().then(() => setFxTick((t) => t + 1));
+    };
+    const refreshFxIfDue = () => {
+      if (!isVisible() || Date.now() - lastFxAt < FX_REFRESH_MS) return;
+      refreshFxNow();
+    };
+
+    // Lancement : une actualisation immédiate des cours (si données périmées) + FX.
+    refreshFxNow();
+    refreshQuotes();
+    lastQuoteAt = Date.now();
+
     const tick = setInterval(() => {
       const settings = loadSettings();
       if (!settings.autoRefresh) return;
       const hours = settings.autoRefreshHours ?? 6;
-      if (hours <= 0) return;
-      if (Date.now() - lastAutoAt < hours * 3600 * 1000) return;
-      lastAutoAt = Date.now();
-      runAutoRefresh();
+      if (hours === 0) return;
+      if (Date.now() - lastQuoteAt < hours * 3600 * 1000) return;
+      lastQuoteAt = Date.now();
+      refreshQuotes();
+      refreshFxIfDue();
     }, 60000);
     const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
+      if (!isVisible()) return;
       const settings = loadSettings();
       if (!settings.autoRefresh) return;
       const hours = settings.autoRefreshHours ?? 6;
-      if (Date.now() - lastAutoAt < hours * 3600 * 1000) return;
-      lastAutoAt = Date.now();
-      runAutoRefresh();
+      if (Date.now() - lastQuoteAt < hours * 3600 * 1000) return;
+      lastQuoteAt = Date.now();
+      refreshQuotes();
+      refreshFxIfDue();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      clearTimeout(first);
       clearInterval(tick);
       document.removeEventListener("visibilitychange", onVisible);
     };
