@@ -6,8 +6,22 @@ const toCents = (n) => Math.round((Number(n) || 0) * 100);
 const fromCents = (c) => c / 100;
 export const sumBy = (arr, selector) => fromCents(arr.reduce((acc, item) => acc + toCents(selector(item)), 0));
 
-export const FX_TO_CHF = { CHF: 1, EUR: 1.04, USD: 0.89, GBP: 1.21 };
-export const toBase = (amount, currency) => amount * (FX_TO_CHF[currency] ?? 1);
+const FALLBACK_FX = { CHF: 1, EUR: 1.04, USD: 0.89, GBP: 1.21 };
+
+let fxRates = { ...FALLBACK_FX };
+export const getFxRates = () => fxRates;
+export const setFxRates = (rates) => {
+  fxRates = { ...FALLBACK_FX, ...rates };
+};
+export const resetFxRates = () => setFxRates({});
+
+export const toBase = (amount, currency) => amount * (fxRates[currency] ?? 1);
+
+export const txnEffect = (txn, accountCurrency = "CHF") => {
+  const sign = txn.type === "depense" ? -1 : 1;
+  const base = toBase(txn.amount, txn.currency);
+  return sign * base / (fxRates[accountCurrency] ?? 1);
+};
 
 export function fmtMoney(amount, currency = "CHF", decimals = 0) {
   try {
@@ -28,6 +42,11 @@ export const fmtDate = (d) => new Date(d).toLocaleDateString("fr-CH", { day: "2-
 export const addMonths = (date, n) => {
   const d = new Date(date);
   d.setMonth(d.getMonth() + n);
+  return d;
+};
+export const addYears = (date, n) => {
+  const d = new Date(date);
+  d.setFullYear(d.getFullYear() + n);
   return d;
 };
 export const monthKey = (d) => {

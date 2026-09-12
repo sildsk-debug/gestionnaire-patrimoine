@@ -1,12 +1,25 @@
 import { useMemo } from "react";
-import { sumBy, toBase, monthKey, monthLabel, addMonths } from "../utils/format.js";
+import { sumBy, toBase, txnEffect, monthKey, monthLabel, addMonths, getFxRates } from "../utils/format.js";
 
 // Centralise tous les calculs financiers dérivés de l'état brut :
 // patrimoine, valeur nette, performance du portefeuille, séries mensuelles, etc.
 export function useComputed(state) {
   return useMemo(() => {
-    const assetAccounts = state.accounts.filter((a) => a.category === "actif");
-    const liabilityAccounts = state.accounts.filter((a) => a.category === "passif");
+    const accountCurrency = Object.fromEntries(state.accounts.map((a) => [a.id, a.currency || "CHF"]));
+    const pending = {};
+    for (const t of state.transactions) {
+      if (!t.accountId) continue;
+      const cur = accountCurrency[t.accountId];
+      if (cur === undefined) continue;
+      pending[t.accountId] = (pending[t.accountId] || 0) + txnEffect(t, cur);
+    }
+    const accounts = state.accounts.map((a) => ({
+      ...a,
+      balance: Math.round(((a.openingBalance ?? 0) + (pending[a.id] || 0)) * 100) / 100,
+    }));
+
+    const assetAccounts = accounts.filter((a) => a.category === "actif");
+    const liabilityAccounts = accounts.filter((a) => a.category === "passif");
     const liquidity = sumBy(assetAccounts, (a) => toBase(a.balance, a.currency));
     const totalLiabilities = sumBy(liabilityAccounts, (a) => toBase(a.balance, a.currency));
 
@@ -61,12 +74,12 @@ export function useComputed(state) {
     const avgMonthlySavings = last3.length ? last3.reduce((a, b) => a + b, 0) / last3.length : 0;
 
     return {
-      assetAccounts, liabilityAccounts, liquidity, totalLiabilities,
+      accounts, assetAccounts, liabilityAccounts, liquidity, totalLiabilities,
       holdingsCalc, totalInvestedCost, totalInvestedValue, totalGain, totalPerfPct,
       stocksValue, etfValue, totalAssets, netWorth,
       monthlySeries, thisMonthIncome: thisMonth.income, thisMonthExpense: thisMonth.expense,
       prevMonthIncome: prevMonth.income, prevMonthExpense: prevMonth.expense,
       thisMonthExpensesByCat, avgMonthlySavings,
     };
-  }, [state.accounts, state.holdings, state.transactions]);
+  }, [state.accounts, state.holdings, state.transactions, getFxRates()]);
 }

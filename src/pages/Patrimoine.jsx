@@ -16,7 +16,18 @@ export default function Patrimoine({ state, computed, openEdit, dispatch }) {
     return hist;
   }, [state.netWorthHistory, range, computed.netWorth]);
 
-  const takeSnapshot = () => dispatch({ type: "ADD_SNAPSHOT", date: new Date().toISOString().slice(0, 10), value: Math.round(computed.netWorth) });
+  const takeSnapshot = () => {
+    const holdings = {};
+    computed.holdingsCalc.forEach((h) => {
+      holdings[h.id] = Math.round(h.valueBase);
+    });
+    dispatch({
+      type: "ADD_SNAPSHOT",
+      date: new Date().toISOString().slice(0, 10),
+      value: Math.round(computed.netWorth),
+      holdings,
+    });
+  };
 
   const allocationData = [
     { name: "Liquidités", value: Math.round(computed.liquidity) },

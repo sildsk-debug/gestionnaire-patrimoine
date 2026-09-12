@@ -1,11 +1,20 @@
 import React, { useRef, useState } from "react";
-import { Download, Upload, RotateCcw, Trash2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Download, Upload, RotateCcw, Trash2, CheckCircle2, AlertTriangle, KeyRound, RefreshCw } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import { buildExportPayload, downloadJson, parseImportPayload, readFileAsText } from "../utils/backup.js";
+import { MARKET_PROVIDERS } from "../utils/marketData.js";
+import { loadSettings, saveSettings } from "../utils/settings.js";
+import { refreshFx, getCachedFxDate } from "../utils/fx.js";
 
 export default function Parametres({ state, dispatch }) {
   const fileInputRef = useRef(null);
   const [status, setStatus] = useState(null); // { type: "success" | "error", message }
+  const [settings, setSettings] = useState(loadSettings());
+  const [keyInput, setKeyInput] = useState(loadSettings().marketApiKey || "");
+  const [fxDate, setFxDate] = useState(getCachedFxDate());
+  const [fxBusy, setFxBusy] = useState(false);
+
+  const provider = MARKET_PROVIDERS.find((p) => p.id === settings.marketProvider) || MARKET_PROVIDERS[0];
 
   const stats = {
     accounts: state.accounts.length,
@@ -25,7 +34,7 @@ export default function Parametres({ state, dispatch }) {
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
-    e.target.value = ""; // permet de réimporter le même fichier plusieurs fois de suite
+    e.target.value = "";
     if (!file) return;
 
     const proceed = window.confirm(
@@ -46,6 +55,26 @@ export default function Parametres({ state, dispatch }) {
     }
   };
 
+  const handleSaveKey = async (e) => {
+    e.preventDefault();
+    const key = keyInput.trim();
+    setSettings(saveSettings({ marketApiKey: key }));
+    setStatus(key ? "Clé API de cours enregistrée localement (jamais exportée)." : "Clé API de cours supprimée.");
+  };
+
+  const handleRefreshFx = async () => {
+    if (fxBusy) return;
+    setFxBusy(true);
+    const res = await refreshFx();
+    if (res) {
+      setFxDate(res.date);
+      setStatus(`Taux de change mis à jour (${res.date}).`);
+    } else {
+      setStatus({ type: "error", message: "Impossible de récupérer les taux. Les taux statiques restent utilisés." });
+    }
+    setFxBusy(false);
+  };
+
   const handleResetDemo = () => {
     if (window.confirm("Remplacer toutes les données actuelles par le jeu de données de démonstration ?")) {
       dispatch({ type: "RESET_DEMO" });
@@ -63,9 +92,9 @@ export default function Parametres({ state, dispatch }) {
   return (
     <div className="page">
       {status && (
-        <div className={"status-banner " + status.type}>
-          {status.type === "success" ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
-          <span>{status.message}</span>
+        <div className={"status-banner " + (status.type || "success")}>
+          {status.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+          <span>{typeof status === "string" ? status : status.message}</span>
         </div>
       )}
 
@@ -91,6 +120,42 @@ export default function Parametres({ state, dispatch }) {
         <button className="btn btn-ghost" onClick={handleImportClick}>
           <Upload size={16} /> Choisir un fichier JSON
         </button>
+      </Card>
+
+      <Card>
+        <h3><KeyRound size={15} /> Cours boursiers (optionnel)</h3>
+        <p className="muted-line">
+          En définissant une clé API ({provider.label}), le bouton « Actualiser les cours » de la page
+          Investissements met à jour les prix automatiquement. La clé reste sur cet appareil et{" "}
+          <b>n'est jamais incluse</b> dans les exports.
+        </p>
+        <p className="muted-line">{provider.note}
+          {provider.keyUrl && <> Clé gratuite :{" "}<a href={provider.keyUrl} target="_blank" rel="noreferrer">bien la récupérer ici</a>.</>}
+        </p>
+        <form onSubmit={handleSaveKey} className="form">
+          <input
+            type="password"
+            value={keyInput}
+            onChange={(e) => setKeyInput(e.target.value)}
+            placeholder="Clé API à coller ici"
+            autoComplete="off"
+          />
+          <button type="submit" className="btn btn-ghost">Enregistrer la clé</button>
+        </form>
+      </Card>
+
+      <Card>
+        <h3><RefreshCw size={15} /> Taux de change</h3>
+        <p className="muted-line">
+          Les taux CHF / EUR / USD / GBP sont récupérés automatiquement à l'ouverture (source : Banque centrale
+          européenne) et mis en cache. Hors-ligne, les taux enregistrés (ou des valeurs statiques) sont utilisés.
+        </p>
+        <div className="toolbar">
+          <span className="muted-line" style={{ padding: 0 }}>Dernière mise à jour : {fxDate || "aucune"}</span>
+          <button className="btn btn-ghost" onClick={handleRefreshFx} disabled={fxBusy}>
+            <RefreshCw size={15} /> Actualiser maintenant
+          </button>
+        </div>
       </Card>
 
       <Card>

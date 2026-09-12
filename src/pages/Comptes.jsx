@@ -39,12 +39,14 @@ function SortableAccountRow({ account, onEdit }) {
   );
 }
 
-export default function Comptes({ state, dispatch, openQuick, openEdit }) {
+export default function Comptes({ state, computed, dispatch, openQuick, openEdit }) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
+
+  const list = computed?.accounts || state.accounts;
 
   const onDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return;
@@ -58,13 +60,13 @@ export default function Comptes({ state, dispatch, openQuick, openEdit }) {
 
   return (
     <div className="page">
-      {state.accounts.length === 0 ? (
+      {list.length === 0 ? (
         <EmptyState title="Aucun compte" sub="Ajoutez votre premier compte bancaire ou passif." actionLabel="Ajouter un compte" onAction={() => openQuick("account")} />
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={state.accounts.map((a) => a.id)} strategy={verticalListSortingStrategy}>
+          <SortableContext items={list.map((a) => a.id)} strategy={verticalListSortingStrategy}>
             <div className="accounts-list">
-              {state.accounts.map((a) => (
+              {list.map((a) => (
                 <SwipeableRow key={a.id} id={a.id} onDelete={() => dispatch({ type: "DELETE_ACCOUNT", id: a.id })}>
                   <SortableAccountRow account={a} onEdit={() => openEdit("account", a)} />
                 </SwipeableRow>

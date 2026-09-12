@@ -1,11 +1,13 @@
-import React, { useEffect, useReducer, useState } from "react";
+import React, { useEffect, useReducer, useRef, useState } from "react";
 import { Menu, X, Moon, Sun } from "lucide-react";
 import { reducer, emptyState } from "./state/reducer.js";
 import { useComputed } from "./state/useComputed.js";
 import { buildDemoData } from "./data/demoData.js";
 import { loadState, saveState } from "./utils/storage.js";
+import { loadCachedFx, refreshFx } from "./utils/fx.js";
+import { executeDueRecurring } from "./utils/recurring.js";
 import { NAV } from "./data/constants.js";
-import { Sheet } from "./components/ui.jsx";
+import { Sheet, Toast } from "./components/ui.jsx";
 import { SwipeProvider } from "./components/SwipeableRow.jsx";
 import { AccountForm, HoldingForm, TransactionForm, GoalForm } from "./components/forms.jsx";
 
@@ -26,11 +28,29 @@ function init() {
   return { ...emptyState, ...buildDemoData() };
 }
 
+const UNDO_LABELS = {
+  DELETE_ACCOUNT: "Compte supprimé",
+  DELETE_HOLDING: "Position supprimée",
+  DELETE_TXN: "Transaction supprimée",
+  DELETE_GOAL: "Objectif supprimé",
+  WIPE_ALL: "Toutes les données ont été effacées",
+  RESET_DEMO: "Données de démonstration chargées",
+};
+
+let recurringExecuted = false;
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, undefined, init);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   const [navOpen, setNavOpen] = useState(false);
   const [quick, setQuick] = useState(null); // { kind, prefill }
   const [editing, setEditing] = useState(null); // { kind, data }
+  const [toast, setToast] = useState(null); // { message, canUndo }
+  const [, setFxTick] = useState(0);
+  const prevStateRef = useRef(null);
+  const toastTimerRef = useRef(null);
 
   // Sauvegarde automatique dans localStorage à chaque changement (léger debounce).
   useEffect(() => {
@@ -40,34 +60,80 @@ export default function App() {
 
   const computed = useComputed(state);
 
+  useEffect(() => {
+    loadCachedFx();
+    setFxTick((t) => t + 1);
+    refreshFx().then(() => setFxTick((t) => t + 1));
+  }, []);
+
+  useEffect(() => {
+    if (recurringExecuted) return;
+    recurringExecuted = true;
+    const due = executeDueRecurring(stateRef.current.transactions || []);
+    if (due.length) {
+      due.forEach((t) => dispatch({ type: "ADD_TXN", data: t }));
+      const msg =
+        due.length === 1
+          ? "1 récurrence créée automatiquement."
+          : `${due.length} récurrences créées automatiquement.`;
+      showToast(msg, false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const showToast = (message, canUndo = false) => {
+    setToast({ message, canUndo });
+    clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 10000);
+  };
+
+  const handleUndo = () => {
+    if (prevStateRef.current) {
+      dispatch({ type: "RESTORE_STATE", state: prevStateRef.current });
+      prevStateRef.current = null;
+    }
+    setToast(null);
+  };
+
+  const wrappedDispatch = (action) => {
+    if (UNDO_LABELS[action.type]) {
+      prevStateRef.current = stateRef.current;
+      showToast(UNDO_LABELS[action.type], true);
+    }
+    dispatch(action);
+  };
+
   const openQuick = (kind, prefill) => { setQuick({ kind, prefill }); setNavOpen(false); };
   const openEdit = (kind, data) => { setEditing({ kind, data }); setNavOpen(false); };
   const closeSheets = () => { setQuick(null); setEditing(null); };
+  const confirmThen = (message, fn) => () => {
+    if (window.confirm(message)) fn();
+  };
 
   const activeNav = NAV.find((n) => n.id === state.view) || NAV[0];
 
   return (
     <div className="app-root" data-theme={state.theme}>
       <header className="app-header">
-        <button className="icon-btn" onClick={() => setNavOpen(true)}><Menu size={20} /></button>
+        <button className="icon-btn" onClick={() => setNavOpen(true)} aria-label="Ouvrir le menu"><Menu size={20} /></button>
         <span className="app-title">{activeNav.label}</span>
-        <button className="icon-btn" onClick={() => dispatch({ type: "TOGGLE_THEME" })}>
+        <button className="icon-btn" onClick={() => dispatch({ type: "TOGGLE_THEME" })} aria-label={state.theme === "light" ? "Passer en mode sombre" : "Passer en mode clair"}>
           {state.theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
         </button>
       </header>
 
       <main className="app-main">
         <SwipeProvider>
-        {state.view === "dashboard" && <Dashboard state={state} computed={computed} openQuick={openQuick} />}
-        {state.view === "patrimoine" && <Patrimoine state={state} computed={computed} openEdit={openEdit} dispatch={dispatch} />}
-        {state.view === "investissements" && <Investissements state={state} dispatch={dispatch} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "transactions" && <Transactions state={state} dispatch={dispatch} kind="all" openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "revenus" && <Transactions state={state} dispatch={dispatch} kind="revenu" openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "depenses" && <Transactions state={state} dispatch={dispatch} kind="depense" openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "budget" && <Budget state={state} computed={computed} dispatch={dispatch} />}
-        {state.view === "objectifs" && <Objectifs state={state} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "comptes" && <Comptes state={state} dispatch={dispatch} openQuick={openQuick} openEdit={openEdit} />}
-        {state.view === "parametres" && <Parametres state={state} dispatch={dispatch} />}
+          {state.view === "dashboard" && <Dashboard state={state} computed={computed} openQuick={openQuick} />}
+          {state.view === "patrimoine" && <Patrimoine state={state} computed={computed} openEdit={openEdit} dispatch={wrappedDispatch} />}
+          {state.view === "investissements" && <Investissements state={state} dispatch={wrappedDispatch} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
+          {state.view === "transactions" && <Transactions state={state} dispatch={wrappedDispatch} kind="all" openQuick={openQuick} openEdit={openEdit} />}
+          {state.view === "revenus" && <Transactions state={state} dispatch={wrappedDispatch} kind="revenu" openQuick={openQuick} openEdit={openEdit} />}
+          {state.view === "depenses" && <Transactions state={state} dispatch={wrappedDispatch} kind="depense" openQuick={openQuick} openEdit={openEdit} />}
+          {state.view === "budget" && <Budget state={state} computed={computed} dispatch={wrappedDispatch} />}
+          {state.view === "objectifs" && <Objectifs state={state} computed={computed} openQuick={openQuick} openEdit={openEdit} />}
+          {state.view === "comptes" && <Comptes state={state} computed={computed} dispatch={wrappedDispatch} openQuick={openQuick} openEdit={openEdit} />}
+          {state.view === "parametres" && <Parametres state={state} dispatch={wrappedDispatch} />}
         </SwipeProvider>
       </main>
 
@@ -104,7 +170,7 @@ export default function App() {
           initial={quick?.prefill ? {
             type: quick.prefill.type, category: quick.prefill.type === "revenu" ? "salaire" : "alimentation",
             amount: "", currency: "CHF", date: new Date().toISOString().slice(0, 10), description: "",
-            accountId: state.accounts[0]?.id || "", recurring: false,
+            accountId: state.accounts[0]?.id || "", frequency: "",
           } : undefined}
           accounts={state.accounts}
           onSubmit={(data) => { dispatch({ type: "ADD_TXN", data }); closeSheets(); }}
@@ -119,7 +185,7 @@ export default function App() {
           <AccountForm
             initial={editing.data}
             onSubmit={(data) => { dispatch({ type: "UPDATE_ACCOUNT", id: editing.data.id, data }); closeSheets(); }}
-            onDelete={() => { dispatch({ type: "DELETE_ACCOUNT", id: editing.data.id }); closeSheets(); }}
+            onDelete={confirmThen("Supprimer ce compte ? Ses transactions seront conservées en « Hors comptes ».", () => { dispatch({ type: "DELETE_ACCOUNT", id: editing.data.id }); closeSheets(); })}
           />
         )}
       </Sheet>
@@ -128,7 +194,7 @@ export default function App() {
           <HoldingForm
             initial={editing.data}
             onSubmit={(data) => { dispatch({ type: "UPDATE_HOLDING", id: editing.data.id, data }); closeSheets(); }}
-            onDelete={() => { dispatch({ type: "DELETE_HOLDING", id: editing.data.id }); closeSheets(); }}
+            onDelete={confirmThen("Supprimer cette position ?", () => { dispatch({ type: "DELETE_HOLDING", id: editing.data.id }); closeSheets(); })}
           />
         )}
       </Sheet>
@@ -138,7 +204,7 @@ export default function App() {
             initial={editing.data}
             accounts={state.accounts}
             onSubmit={(data) => { dispatch({ type: "UPDATE_TXN", id: editing.data.id, data }); closeSheets(); }}
-            onDelete={() => { dispatch({ type: "DELETE_TXN", id: editing.data.id }); closeSheets(); }}
+            onDelete={confirmThen("Supprimer cette transaction ?", () => { dispatch({ type: "DELETE_TXN", id: editing.data.id }); closeSheets(); })}
           />
         )}
       </Sheet>
@@ -147,10 +213,16 @@ export default function App() {
           <GoalForm
             initial={editing.data}
             onSubmit={(data) => { dispatch({ type: "UPDATE_GOAL", id: editing.data.id, data }); closeSheets(); }}
-            onDelete={() => { dispatch({ type: "DELETE_GOAL", id: editing.data.id }); closeSheets(); }}
+            onDelete={confirmThen("Supprimer cet objectif ?", () => { dispatch({ type: "DELETE_GOAL", id: editing.data.id }); closeSheets(); })}
           />
         )}
       </Sheet>
+
+      <Toast
+        toast={toast}
+        onUndo={handleUndo}
+        onDismiss={() => { prevStateRef.current = null; setToast(null); }}
+      />
     </div>
   );
 }

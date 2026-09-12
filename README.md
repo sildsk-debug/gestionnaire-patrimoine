@@ -14,7 +14,13 @@ rien n'est envoyé à un serveur.
 - Transactions (revenus / dépenses) avec recherche, filtres, catégories
 - Budget mensuel par catégorie avec barres de progression
 - Objectifs financiers avec estimation du temps restant
-- Comptes multi-devises (CHF / EUR / USD / GBP)
+- Transactions récurrentes : les occurrences dues sont créées automatiquement
+  à l'ouverture (mensuel / trimestriel / annuel)
+- Comptes multi-devises (CHF / EUR / USD / GBP) avec **taux de change
+  automatiques** (source : Banque centrale européenne) et repli hors-ligne
+- **Cours boursiers optionnels** (Alpha Vantage) : clé API stockée localement
+  et jamais exportée, bouton « Actualiser les cours »
+- Annuler une action (suppression, effacement) via un toast
 - Import / export des données au format JSON (page Paramètres)
 - Mode clair / sombre
 - Données de démonstration au premier lancement, réinitialisables
@@ -40,6 +46,16 @@ npm run preview   # pour tester le build localement
 
 Le résultat est généré dans `dist/`, prêt à être hébergé sur n'importe quel
 hébergeur statique (GitHub Pages, Netlify, Vercel, Cloudflare Pages...).
+
+## Tests
+
+```bash
+npm test
+```
+
+Tests unitaires (Vitest) couvrant le reducer, les calculs dérivés, les
+conversions de devises, les migrations d'état, les récurrentes et l'échange
+JSON.
 
 ## Publier sur GitHub Pages
 
@@ -71,7 +87,13 @@ src/
     demoData.js             Génération des données de démonstration
   utils/
     format.js               Formatage montants/dates, conversions de devise
-    storage.js               Lecture/écriture localStorage
+    storage.js              Lecture/écriture localStorage
+    migrate.js              Migration de l'état entre versions du schéma
+    settings.js             Réglages locaux (clé API, jamais exportée)
+    fx.js                   Taux de change automatiques (frankfurter.app)
+    marketData.js           Cours boursiers (Alpha Vantage)
+    recurring.js            Exécution des transactions récurrentes
+    backup.js               Export/import JSON
   components/
     ui.jsx                  Composants réutilisables (Card, Sheet, etc.)
     forms.jsx                Formulaires (compte, position, transaction, objectif)
@@ -110,30 +132,32 @@ Limites à connaître :
 - En navigation privée stricte, certains navigateurs limitent ou vident
   `localStorage` à la fermeture de l'onglet.
 
-## Brancher une vraie source de cours boursiers
+## Cours boursiers
 
-Les prix des actions/ETF sont saisis manuellement (`currentPrice` dans
-`src/data/constants.js` / formulaire `HoldingForm`). Pour brancher une API
-réelle plus tard :
+Les prix des actions/ETF sont saisis manuellement (`currentPrice`), mais il est
+possible d'**actualiser automatiquement** les cours via le fournisseur
+Alpha Vantage :
 
-1. Créez `src/utils/marketData.js` avec une fonction `fetchQuote(ticker)` qui
-   appelle l'API de votre choix (ex. Alpha Vantage, Finnhub, Twelve Data).
-2. Dans `src/pages/Investissements.jsx`, ajoutez un bouton "Actualiser les
-   cours" qui appelle `fetchQuote` pour chaque position et dispatch
-   `UPDATE_HOLDING` avec le nouveau `currentPrice`.
-3. Si l'API nécessite une clé, stockez-la dans un fichier `.env` local
-   (`VITE_MARKET_API_KEY=...`, préfixe `VITE_` obligatoire pour Vite) et
-   ajoutez `.env` à `.gitignore` — ne committez jamais de clé API.
+1. Créez une clé API gratuite sur le site Alpha Vantage.
+2. Collez-la dans **Paramètres → Cours boursiers** : elle est stockée
+   uniquement sur votre appareil (clé localStorage séparée) et **jamais
+   incluse** dans les exports JSON.
+3. Sur la page **Investissements**, cliquez « Actualiser les cours ». Les prix
+   sont mis en cache 24 h pour ne pas dépasser le quota gratuit (~25 req/jour).
+
+Les courbes d'évolution par position se construisent à partir des
+**instantanés** enregistrés dans la page Patrimoine (fonctionne sans clé API).
 
 ## Simplifications assumées (par rapport à un outil bancaire complet)
 
-- Les soldes de comptes sont saisis manuellement plutôt que recalculés
-  automatiquement à partir des transactions.
+- **Les soldes de comptes sont recalculés** à partir d'un solde initial
+  (`openingBalance`) et de l'ensemble des transactions rattachées au compte
+  (conversion de devise supportée). Un compte supprimé conserve ses
+  transactions, réaffectées au pseudo-compte « Hors comptes ».
 - Chaque position (action/ETF) représente un lot unique agrégé (quantité +
   prix de revient moyen), pas un historique ligne par ligne.
-- Les taux de change (`FX_TO_CHF` dans `src/utils/format.js`) sont fixes ;
-  brancher une API de change est le même principe que pour les cours
-  boursiers ci-dessus.
+- Les taux de change sont récupérés à l'ouverture (frankfurter.app, taux ECB)
+  et mis en cache ; hors-ligne, les taux enregistrés ou statiques sont utilisés.
 - Pas d'import/export CSV pour l'instant.
 
 ## Licence

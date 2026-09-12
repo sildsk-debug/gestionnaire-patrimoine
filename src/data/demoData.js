@@ -7,10 +7,10 @@ export function buildDemoData() {
   const today = new Date();
 
   const accounts = [
-    { id: uid("acc"), name: "Compte courant", type: "courant", category: "actif", currency: "CHF", balance: 8200 },
-    { id: uid("acc"), name: "Compte épargne", type: "epargne", category: "actif", currency: "CHF", balance: 15000 },
-    { id: uid("acc"), name: "Compte-titres (liquidités)", type: "titres", category: "actif", currency: "CHF", balance: 1200 },
-    { id: uid("acc"), name: "Leasing voiture", type: "credit", category: "passif", currency: "CHF", balance: 8000 },
+    { id: uid("acc"), name: "Compte courant", type: "courant", category: "actif", currency: "CHF", openingBalance: 3500 },
+    { id: uid("acc"), name: "Compte épargne", type: "epargne", category: "actif", currency: "CHF", openingBalance: 15000 },
+    { id: uid("acc"), name: "Compte-titres (liquidités)", type: "titres", category: "actif", currency: "CHF", openingBalance: 1200 },
+    { id: uid("acc"), name: "Leasing voiture", type: "credit", category: "passif", currency: "CHF", openingBalance: 8000 },
   ];
 
   const holdings = [
@@ -40,7 +40,7 @@ export function buildDemoData() {
   ];
   for (let i = 5; i >= 0; i--) {
     const d = addMonths(today, -i);
-    transactions.push({ id: uid("txn"), type: "revenu", category: "salaire", amount: 7200, currency: "CHF", date: new Date(d.getFullYear(), d.getMonth(), 25).toISOString().slice(0, 10), description: "Salaire", accountId: accounts[0].id, recurring: true });
+    transactions.push({ id: uid("txn"), type: "revenu", category: "salaire", amount: 7200, currency: "CHF", date: new Date(d.getFullYear(), d.getMonth(), 25).toISOString().slice(0, 10), description: "Salaire", accountId: accounts[0].id, recurring: true, frequency: "monthly" });
     if (i === 4 || i === 1) {
       transactions.push({ id: uid("txn"), type: "revenu", category: "freelance", amount: 600 + Math.round(Math.random() * 400), currency: "CHF", date: new Date(d.getFullYear(), d.getMonth(), 12).toISOString().slice(0, 10), description: "Mission freelance", accountId: accounts[0].id, recurring: false });
     }
@@ -50,6 +50,7 @@ export function buildDemoData() {
         id: uid("txn"), type: "depense", category: be.cat, amount: Math.round(be.amt * variance), currency: "CHF",
         date: new Date(d.getFullYear(), d.getMonth(), 3 + idx * 3).toISOString().slice(0, 10),
         description: be.desc, accountId: accounts[0].id, recurring: ["logement", "abonnements", "sante"].includes(be.cat),
+        frequency: ["logement", "abonnements", "sante"].includes(be.cat) ? "monthly" : "",
       });
     });
   }
