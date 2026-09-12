@@ -6,6 +6,8 @@ import { buildDemoData } from "./data/demoData.js";
 import { loadState, saveState } from "./utils/storage.js";
 import { loadCachedFx, refreshFx } from "./utils/fx.js";
 import { executeDueRecurring } from "./utils/recurring.js";
+import { getCachedQuote, refreshAllQuotes, getProviderDailyLimit } from "./utils/marketData.js";
+import { loadSettings, getMarketKey } from "./utils/settings.js";
 import { NAV } from "./data/constants.js";
 import { Sheet, Toast } from "./components/ui.jsx";
 import { SwipeProvider } from "./components/SwipeableRow.jsx";
@@ -64,6 +66,40 @@ export default function App() {
     loadCachedFx();
     setFxTick((t) => t + 1);
     refreshFx().then(() => setFxTick((t) => t + 1));
+  }, []);
+
+  useEffect(() => {
+    const runAutoRefresh = async () => {
+      const settings = loadSettings();
+      if (!settings.autoRefresh) return;
+      const provider = settings.marketProvider || "alphavantage";
+      const apiKey = getMarketKey(settings, provider);
+      if (!apiKey) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      const holdings = stateRef.current.holdings || [];
+      if (!holdings.length) return;
+      const maxAge = Math.max(1, settings.autoRefreshHours || 6) * 3600 * 1000;
+      const stale = holdings.filter((h) => getCachedQuote(h.ticker, maxAge) == null);
+      if (!stale.length) return;
+      let res;
+      try {
+        res = await refreshAllQuotes(stale, provider, apiKey);
+      } catch (err) {
+        return;
+      }
+      for (const h of stale) {
+        if (h.appliedPrice != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: h.appliedPrice } });
+      }
+      if (res.updated) showToast(`${res.updated} cours actualisés automatiquement.`, false);
+      else if (res.stoppedForBudget > 0) showToast(`Budget de cours du jour atteint (${getProviderDailyLimit(provider)} requêtes). Actualisation repoussée.`, false);
+    };
+    const first = setTimeout(runAutoRefresh, 2000);
+    const tick = setInterval(runAutoRefresh, 6 * 3600 * 1000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(tick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

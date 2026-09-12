@@ -4,8 +4,8 @@ import { Wallet, TrendingUp, TrendingDown, Plus, RefreshCw } from "lucide-react"
 import { Card, KpiCard, EmptyState } from "../components/ui.jsx";
 import SwipeableRow from "../components/SwipeableRow.jsx";
 import { fmtMoney, fmtPct, fmtDate } from "../utils/format.js";
-import { refreshAllQuotes, getCachedQuote } from "../utils/marketData.js";
-import { loadSettings } from "../utils/settings.js";
+import { refreshAllQuotes, getCachedQuote, getQuoteBudget, getProviderDailyLimit } from "../utils/marketData.js";
+import { loadSettings, getMarketKey } from "../utils/settings.js";
 
 const tooltipStyle = { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, fontSize: 12 };
 
@@ -45,8 +45,11 @@ export default function Investissements({ state, dispatch, computed, openQuick, 
     setRefreshing(true);
     setRefreshMsg(null);
     const settings = loadSettings();
-    if (!settings.marketApiKey) {
-      setRefreshMsg({ type: "error", text: "Ajoutez une clé API dans les Paramètres pour actualiser les cours (ou saisissez les prix manuellement)." });
+    const provider = settings.marketProvider || "alphavantage";
+    const apiKey = getMarketKey(settings, provider);
+    const providerLabel = provider === "twelvedata" ? "Twelve Data" : "Alpha Vantage";
+    if (!apiKey) {
+      setRefreshMsg({ type: "error", text: `Ajoutez une clé API ${providerLabel} dans les Paramètres pour actualiser les cours (ou saisissez les prix manuellement).` });
       setRefreshing(false);
       return;
     }
@@ -56,7 +59,7 @@ export default function Investissements({ state, dispatch, computed, openQuick, 
       setRefreshing(false);
       return;
     }
-    const res = await refreshAllQuotes(toRefresh, settings.marketApiKey);
+    const res = await refreshAllQuotes(toRefresh, provider, apiKey);
     for (const h of toRefresh) {
       if (h.appliedPrice != null) dispatch({ type: "UPDATE_HOLDING", id: h.id, data: { currentPrice: h.appliedPrice } });
     }
@@ -95,6 +98,11 @@ export default function Investissements({ state, dispatch, computed, openQuick, 
         {refreshing ? "Actualisation..." : "Actualiser les cours"}
       </button>
       {refreshMsg && <p className={"muted-line status-" + refreshMsg.type}>{refreshMsg.text}</p>}
+      {loadSettings().autoRefresh && (
+        <p className="muted-line" style={{ padding: 0 }}>
+          Auto : à l'ouverture de l'app puis toutes les 6 h · Requêtes utilisées aujourd'hui : {getQuoteBudget().used} / {getProviderDailyLimit(loadSettings().marketProvider || "alphavantage")}
+        </p>
+      )}
 
       {rows.length === 0 ? (
         <EmptyState title="Aucune position" sub="Ajoutez votre première action ou ETF pour suivre votre portefeuille." actionLabel="Ajouter un investissement" onAction={() => openQuick("holding")} />

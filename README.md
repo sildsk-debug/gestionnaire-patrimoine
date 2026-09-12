@@ -18,7 +18,7 @@ rien n'est envoyé à un serveur.
   à l'ouverture (mensuel / trimestriel / annuel)
 - Comptes multi-devises (CHF / EUR / USD / GBP) avec **taux de change
   automatiques** (source : Banque centrale européenne) et repli hors-ligne
-- **Cours boursiers optionnels** (Alpha Vantage) : clé API stockée localement
+- **Cours boursiers optionnels** (Alpha Vantage ou Twelve Data au choix) : clé API stockée localement
   et jamais exportée, bouton « Actualiser les cours »
 - Annuler une action (suppression, effacement) via un toast
 - Import / export des données au format JSON (page Paramètres)
@@ -91,7 +91,7 @@ src/
     migrate.js              Migration de l'état entre versions du schéma
     settings.js             Réglages locaux (clé API, jamais exportée)
     fx.js                   Taux de change automatiques (frankfurter.app)
-    marketData.js           Cours boursiers (Alpha Vantage)
+    marketData.js           Cours boursiers (Alpha Vantage / Twelve Data)
     recurring.js            Exécution des transactions récurrentes
     backup.js               Export/import JSON
   components/
@@ -135,15 +135,24 @@ Limites à connaître :
 ## Cours boursiers
 
 Les prix des actions/ETF sont saisis manuellement (`currentPrice`), mais il est
-possible d'**actualiser automatiquement** les cours via le fournisseur
-Alpha Vantage :
+possible de les **actualiser automatiquement** via deux fournisseurs au choix :
 
-1. Créez une clé API gratuite sur le site Alpha Vantage.
-2. Collez-la dans **Paramètres → Cours boursiers** : elle est stockée
-   uniquement sur votre appareil (clé localStorage séparée) et **jamais
-   incluse** dans les exports JSON.
-3. Sur la page **Investissements**, cliquez « Actualiser les cours ». Les prix
-   sont mis en cache 24 h pour ne pas dépasser le quota gratuit (~25 req/jour).
+| Fournisseur | Limite | Batch | Idéal pour |
+|---|---|---|---|
+| **Alpha Vantage** | ~25 req/jour, 5 req/min | non | petit portefeuille |
+| **Twelve Data** | 800 crédits/jour, 8/min | jusqu'à 8 symboles/requête | portefeuille modéré |
+
+1. Choisissez le fournisseur dans **Paramètres → Cours boursiers**.
+2. Créez une clé API gratuite chez le fournisseur choisi.
+3. Collez-la dans **Paramètres** : elle est stockée uniquement sur votre
+   appareil (clé localStorage séparée) et **jamais incluse** dans les exports JSON.
+4. Sur la page **Investissements**, cliquez « Actualiser les cours ». Les prix
+   sont mis en cache 24 h pour ne pas dépasser le quota.
+
+Une **actualisation automatique** optionnelle (page Paramètres) rafraîchit les
+cours à l'ouverture de l'app puis toutes les 6 h, dans la limite du quota du
+fournisseur sélectionné (compteur affiché). Fonctionne uniquement quand l'app
+est ouverte.
 
 Les courbes d'évolution par position se construisent à partir des
 **instantanés** enregistrés dans la page Patrimoine (fonctionne sans clé API).

@@ -1,20 +1,26 @@
-import React, { useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Download, Upload, RotateCcw, Trash2, CheckCircle2, AlertTriangle, KeyRound, RefreshCw } from "lucide-react";
 import { Card } from "../components/ui.jsx";
 import { buildExportPayload, downloadJson, parseImportPayload, readFileAsText } from "../utils/backup.js";
-import { MARKET_PROVIDERS } from "../utils/marketData.js";
-import { loadSettings, saveSettings } from "../utils/settings.js";
+import { MARKET_PROVIDERS, validateMarketApiKey, getQuoteBudget, getProviderDailyLimit } from "../utils/marketData.js";
+import { loadSettings, saveSettings, getMarketKey, setMarketKey } from "../utils/settings.js";
 import { refreshFx, getCachedFxDate } from "../utils/fx.js";
+import { fmtMoney } from "../utils/format.js";
 
 export default function Parametres({ state, dispatch }) {
   const fileInputRef = useRef(null);
-  const [status, setStatus] = useState(null); // { type: "success" | "error", message }
+  const [status, setStatus] = useState(null);
   const [settings, setSettings] = useState(loadSettings());
-  const [keyInput, setKeyInput] = useState(loadSettings().marketApiKey || "");
+  const [provider, setProvider] = useState(loadSettings().marketProvider || "alphavantage");
+  const [keyInput, setKeyInput] = useState(getMarketKey(loadSettings(), loadSettings().marketProvider || "alphavantage") || "");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(loadSettings().autoRefresh ?? false);
   const [fxDate, setFxDate] = useState(getCachedFxDate());
   const [fxBusy, setFxBusy] = useState(false);
 
-  const provider = MARKET_PROVIDERS.find((p) => p.id === settings.marketProvider) || MARKET_PROVIDERS[0];
+  const providerInfo = MARKET_PROVIDERS.find((p) => p.id === provider) || MARKET_PROVIDERS[0];
+  const dailyLimit = getProviderDailyLimit(provider);
+  const budgetUsed = getQuoteBudget().used;
 
   const stats = {
     accounts: state.accounts.length,
@@ -55,11 +61,63 @@ export default function Parametres({ state, dispatch }) {
     }
   };
 
+  const handleChangeProvider = (e) => {
+    const nextId = e.target.value;
+    const current = loadSettings();
+    setProvider(nextId);
+    setSettings(saveSettings({ marketProvider: nextId }));
+    setKeyInput(getMarketKey(current, nextId) || "");
+    setStatus({
+      type: "success",
+      message: nextId === "twelvedata"
+        ? "Fournisseur sélectionné : Twelve Data (cours temps réel US, 800 crédits/jour)."
+        : "Fournisseur sélectionné : Alpha Vantage (25 requêtes/jour).",
+    });
+  };
+
   const handleSaveKey = async (e) => {
     e.preventDefault();
     const key = keyInput.trim();
-    setSettings(saveSettings({ marketApiKey: key }));
-    setStatus(key ? "Clé API de cours enregistrée localement (jamais exportée)." : "Clé API de cours supprimée.");
+    setKeyBusy(true);
+    try {
+      if (!key) {
+        setSettings(saveSettings(setMarketKey(loadSettings(), provider, "")));
+        setStatus({ type: "error", message: "Clé API supprimée de cet appareil." });
+        return;
+      }
+      const res = await validateMarketApiKey(key, provider);
+      if (res.ok) {
+        setSettings(saveSettings(setMarketKey(loadSettings(), provider, key)));
+        const hint = res.price != null ? ` (test réussi : IBM ~ ${fmtMoney(res.price, "USD")})` : "";
+        setStatus({ type: "success", message: `Clé ${providerInfo.label} valide et enregistrée${hint}. Vous pouvez actualiser les cours.` });
+      } else if (res.rateLimited) {
+        setSettings(saveSettings(setMarketKey(loadSettings(), provider, key)));
+        setStatus({
+          type: "error",
+          message: `Clé enregistrée, mais validation impossible (limite ${providerInfo.label} atteinte). Réessayez dans quelques heures.`,
+        });
+      } else {
+        setStatus({ type: "error", message: `Clé refusée par ${providerInfo.label} : ` + (res.message || "clé invalide") });
+      }
+    } catch (err) {
+      setSettings(saveSettings(setMarketKey(loadSettings(), provider, key)));
+      setStatus({
+        type: "error",
+        message: `Clé enregistrée, mais ${providerInfo.label} est injoignable (réseau). Réessayez avec « Actualiser les cours ».`,
+      });
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
+  const handleToggleAutoRefresh = (e) => {
+    const next = e.target.checked;
+    setAutoRefresh(next);
+    setSettings(saveSettings({ autoRefresh: next }));
+    setStatus({
+      type: "success",
+      message: next ? "Actualisation automatique activée : à chaque ouverture de l'app, puis toutes les 6 heures." : "Actualisation automatique désactivée.",
+    });
   };
 
   const handleRefreshFx = async () => {
@@ -92,7 +150,7 @@ export default function Parametres({ state, dispatch }) {
   return (
     <div className="page">
       {status && (
-        <div className={"status-banner " + (status.type || "success")}>
+        <div className={"status-banner " + (status.type === "error" ? "status-error" : "status-success")} role="status" aria-live="polite">
           {status.type === "error" ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
           <span>{typeof status === "string" ? status : status.message}</span>
         </div>
@@ -125,23 +183,46 @@ export default function Parametres({ state, dispatch }) {
       <Card>
         <h3><KeyRound size={15} /> Cours boursiers (optionnel)</h3>
         <p className="muted-line">
-          En définissant une clé API ({provider.label}), le bouton « Actualiser les cours » de la page
-          Investissements met à jour les prix automatiquement. La clé reste sur cet appareil et{" "}
-          <b>n'est jamais incluse</b> dans les exports.
+          Choisissez le fournisseur de cours à utiliser. Le bouton « Actualiser les cours » et l'actualisation
+          automatique utilisent le fournisseur sélectionné. Les clés restent sur cet appareil et{" "}
+          <b>ne sont jamais incluses</b> dans les exports.
         </p>
-        <p className="muted-line">{provider.note}
-          {provider.keyUrl && <> Clé gratuite :{" "}<a href={provider.keyUrl} target="_blank" rel="noreferrer">bien la récupérer ici</a>.</>}
+
+        <label className="field-label" htmlFor="market-provider">Fournisseur privilégié</label>
+        <select id="market-provider" className="sort-select full" value={provider} onChange={handleChangeProvider}>
+          {MARKET_PROVIDERS.map((p) => (
+            <option key={p.id} value={p.id}>{p.label}</option>
+          ))}
+        </select>
+
+        <p className="muted-line" style={{ marginTop: 8 }}>{providerInfo.note}
+          {providerInfo.keyUrl && <> Clé gratuite :{" "}<a href={providerInfo.keyUrl} target="_blank" rel="noreferrer">bien la récupérer ici</a>.</>}
+        </p>
+        <p className="muted-line">
+          Clé actuellement enregistrée pour {providerInfo.label} :{" "}
+          <b>{getMarketKey(settings, provider) ? "oui (masquée, jamais exportée)" : "non"}</b>.
+          Elle est vérifiée auprès du fournisseur lors de l'enregistrement.
         </p>
         <form onSubmit={handleSaveKey} className="form">
           <input
             type="password"
             value={keyInput}
             onChange={(e) => setKeyInput(e.target.value)}
-            placeholder="Clé API à coller ici"
+            placeholder={`Clé API ${providerInfo.label} à coller ici`}
             autoComplete="off"
           />
-          <button type="submit" className="btn btn-ghost">Enregistrer la clé</button>
+          <button type="submit" className="btn btn-ghost" disabled={keyBusy}>
+            <RefreshCw size={15} className={keyBusy ? "spin" : ""} />
+            {keyBusy ? "Vérification…" : keyInput.trim() ? "Vérifier et enregistrer" : "Supprimer la clé"}
+          </button>
         </form>
+        <p className="muted-line" style={{ marginTop: 12 }}>
+          {providerInfo.label} — requêtes utilisées aujourd'hui : <b>{budgetUsed}</b> / {dailyLimit}
+        </p>
+        <label className="checkbox-row">
+          <input type="checkbox" checked={autoRefresh} onChange={handleToggleAutoRefresh} />
+          Actualisation automatique des cours (à l'ouverture de l'app, puis toutes les 6 h)
+        </label>
       </Card>
 
       <Card>
